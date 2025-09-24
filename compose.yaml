@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:17
+    container_name: postgres
+    environment:
+      POSTGRES_USER: ${ENV_POSTGRESQL_USER}
+      POSTGRES_PASSWORD: ${ENV_POSTGRESQL_PASSWORD}
+      POSTGRES_DB: postgres_learning_dev_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - learning.dev:/var/lib/postgresql/data
+
+volumes:
+  learning.dev:
