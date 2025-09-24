@@ -1,48 +1,67 @@
 name: CI - Spring Boot + Flyway + PostgreSQL + Maven
-
 on:
   push:
-    branches: [ "master" ]
+    branches: [master]
   pull_request:
-    branches: [ "master" ]
+    branches: [master]
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
 
     services:
       postgres:
         image: postgres:17
         env:
-          POSTGRES_USER: ${{ ENV_POSTGRESQL_USER }}
-          POSTGRES_PASSWORD: ${{ ENV_ROOT_PASSWORD }}
-          POSTGRES_DB: postgres_learning_dev_db
+          POSTGRES_DB: testdb
+          POSTGRES_USER: ${{ secrets.ENV_POSTGRESQL_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.ENV_POSTGRESQL_PASSWORD }}
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U ${{ ENV_POSTGRESQL_USER }} -d postgres_learning_dev_db"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
-      # Step 1: checkout the repository code
-      - name: Checkout code
-        uses: actions/checkout@v3
+      # 1. Checkout - baixa o código do repositório
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # Step 2: setup Java 17 and cache Maven
-      - name: Setup Java
-        uses: actions/setup-java@v3
+      # 2. Java setup - configura Java 21 e Maven
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
-          cache: maven
 
-      # Step 3: build project and run tests
-      - name: Build and Run Maven Tests
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      # 3. PostgreSQL container já está rodando através do services acima
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          timeout 60s bash -c 'until pg_isready -h localhost -p 5432 -U ${{ secrets.ENV_POSTGRESQL_USER }}; do sleep 2; done'
         env:
-          POSTGRES_USER: ${{ secrets.ENV_POSTGRESQL_USER}}
-          POSTGRES_PASSWORD: ${{ secrets.ENV_ROOT_PASSWORD }}
-          POSTGRES_DB: postgres_learning_dev_db
-        run: mvn clean verify
+          PGPASSWORD: ${{ secrets.ENV_POSTGRESQL_PASSWORD }}
 
+      # 4. Build + Tests - Maven roda build e testes, Flyway aplica migrações
+      - name: Run Maven build and tests
+        run: ./mvnw clean verify
+        env:
+          # Variáveis para o Spring Boot
+          SPRING_PROFILES_ACTIVE: test
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/testdb
+          SPRING_DATASOURCE_USERNAME: ${{ secrets.ENV_POSTGRESQL_USER }}
+          SPRING_DATASOURCE_PASSWORD: ${{ secrets.ENV_POSTGRESQL_PASSWORD }}
+
+          # Variáveis originais do .env (caso sua aplicação use elas diretamente)
+          ENV_ROOT_USER: ${{ secrets.ENV_ROOT_USER }}
+          ENV_ROOT_PASSWORD: ${{ secrets.ENV_ROOT_PASSWORD }}
+          ENV_POSTGRESQL_USER: ${{ secrets.ENV_POSTGRESQL_USER }}
+          ENV_POSTGRESQL_PASSWORD: ${{ secrets.ENV_POSTGRESQL_PASSWORD }}
