@@ -1,28 +1,14 @@
 name: CI - Spring Boot + Flyway + PostgreSQL + Maven
+
 on:
   push:
-    branches: [master]
+    branches: [ main, develop ]
   pull_request:
-    branches: [master]
+    branches: [ main ]
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_DB: testdb
-          POSTGRES_USER: ${{ secrets.ENV_POSTGRESQL_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.ENV_POSTGRESQL_PASSWORD }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       # 1. Checkout - baixa o código do repositório
@@ -43,12 +29,62 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
 
-      # 3. PostgreSQL container já está rodando através do services acima
+      # 3. Criar arquivo .env e subir PostgreSQL
+      - name: Create .env file for CI
+        run: |
+          cat << EOF > .env
+          ENV_ROOT_USER=${{ secrets.ENV_ROOT_USER }}
+          ENV_ROOT_PASSWORD=${{ secrets.ENV_ROOT_PASSWORD }}
+          ENV_POSTGRESQL_USER=${{ secrets.ENV_POSTGRESQL_USER }}
+          ENV_POSTGRESQL_PASSWORD=${{ secrets.ENV_POSTGRESQL_PASSWORD }}
+          POSTGRES_DB=testdb
+          EOF
+
+      - name: Start PostgreSQL with Docker Compose
+        run: |
+          # Criar docker-compose temporário se não existir
+          if [ ! -f docker-compose.yml ]; then
+            cat << EOF > docker-compose-ci.yml
+          version: '3.8'
+          services:
+            postgres:
+              image: postgres:15
+              restart: always
+              environment:
+                POSTGRES_DB: \${POSTGRES_DB:-testdb}
+                POSTGRES_USER: \${ENV_POSTGRESQL_USER}
+                POSTGRES_PASSWORD: \${ENV_POSTGRESQL_PASSWORD}
+                POSTGRES_HOST_AUTH_METHOD: trust
+              ports:
+                - "5432:5432"
+              volumes:
+                - postgres_data:/var/lib/postgresql/data
+              healthcheck:
+                test: ["CMD-SHELL", "pg_isready -U \${ENV_POSTGRESQL_USER} -d \${POSTGRES_DB:-testdb}"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+          volumes:
+            postgres_data:
+          EOF
+            docker-compose -f docker-compose-ci.yml up -d
+          else
+            docker-compose up -d postgres
+          fi
+
       - name: Wait for PostgreSQL to be ready
         run: |
-          timeout 60s bash -c 'until pg_isready -h localhost -p 5432 -U ${{ secrets.ENV_POSTGRESQL_USER }}; do sleep 2; done'
-        env:
-          PGPASSWORD: ${{ secrets.ENV_POSTGRESQL_PASSWORD }}
+          echo "Waiting for PostgreSQL to be ready..."
+          timeout 120s bash -c 'until docker-compose ps | grep postgres | grep "Up (healthy)"; do 
+            echo "PostgreSQL status:"
+            docker-compose ps postgres
+            echo "PostgreSQL logs:"
+            docker-compose logs postgres | tail -10
+            sleep 5
+          done'
+          
+          echo "Testing PostgreSQL connection..."
+          docker-compose exec -T postgres psql -U ${{ secrets.ENV_POSTGRESQL_USER }} -d testdb -c "SELECT version();"
 
       # 4. Build + Tests - Maven roda build e testes, Flyway aplica migrações
       - name: Run Maven build and tests
@@ -60,8 +96,31 @@ jobs:
           SPRING_DATASOURCE_USERNAME: ${{ secrets.ENV_POSTGRESQL_USER }}
           SPRING_DATASOURCE_PASSWORD: ${{ secrets.ENV_POSTGRESQL_PASSWORD }}
 
-          # Variáveis originais do .env (caso sua aplicação use elas diretamente)
+          # Variáveis originais do .env
           ENV_ROOT_USER: ${{ secrets.ENV_ROOT_USER }}
           ENV_ROOT_PASSWORD: ${{ secrets.ENV_ROOT_PASSWORD }}
           ENV_POSTGRESQL_USER: ${{ secrets.ENV_POSTGRESQL_USER }}
           ENV_POSTGRESQL_PASSWORD: ${{ secrets.ENV_POSTGRESQL_PASSWORD }}
+
+      # Cleanup
+      - name: Stop containers
+        if: always()
+        run: |
+          if [ -f docker-compose-ci.yml ]; then
+            docker-compose -f docker-compose-ci.yml down -v
+          else
+            docker-compose down postgres -v
+          fi
+
+      # Debug em caso de falha
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          echo "=== PostgreSQL logs ==="
+          if [ -f docker-compose-ci.yml ]; then
+            docker-compose -f docker-compose-ci.yml logs postgres
+          else
+            docker-compose logs postgres
+          fi
+          echo "=== Container status ==="
+          docker ps -a
