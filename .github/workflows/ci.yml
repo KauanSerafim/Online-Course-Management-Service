@@ -7,12 +7,13 @@ on:
     branches: [master]
 
 env:
-  # Variáveis de ambiente globais para o job
+  # Variáveis de ambiente para CI/Test
   DB_HOST: localhost
   DB_PORT: 5432
   DB_NAME: testdb
-  DB_USERNAME: ${{ secrets.DB_USERNAME }}
-  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+  # Para CI, usamos credenciais fixas (seguro pois é ambiente temporário)
+  CI_DB_USERNAME: postgres
+  CI_DB_PASSWORD: postgres
   SPRING_PROFILES_ACTIVE: test
 
 jobs:
@@ -23,8 +24,8 @@ jobs:
       postgres:
         image: postgres:17
         env:
-          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          POSTGRES_USER: ${{ secrets.DB_USERNAME }}
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
           POSTGRES_DB: testdb
         ports:
           - 5432:5432
@@ -41,7 +42,7 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '17'
           distribution: 'temurin'
 
       - name: Cache Maven dependencies
@@ -51,40 +52,69 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
 
-      - name: Criar arquivo .env para Spring Boot
+      - name: Criar arquivo .env para testes
         run: |
           cat > .env << EOF
+          # Configurações para ambiente de teste CI
           DB_HOST=${{ env.DB_HOST }}
           DB_PORT=${{ env.DB_PORT }}
           DB_NAME=${{ env.DB_NAME }}
-          DB_USERNAME=${{ secrets.DB_USERNAME }}
-          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_USERNAME=${{ env.CI_DB_USERNAME }}
+          DB_PASSWORD=${{ env.CI_DB_PASSWORD }}
           SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILES_ACTIVE }}
           EOF
+          
+          echo "✅ Arquivo .env criado para testes"
 
       - name: Aguardar PostgreSQL estar pronto
         run: |
-          until pg_isready -h ${{ env.DB_HOST }} -p ${{ env.DB_PORT }} -U ${{ secrets.DB_USERNAME }}; do
-            echo "Aguardando PostgreSQL..."
+          echo "🔄 Aguardando PostgreSQL ficar disponível..."
+          until pg_isready -h ${{ env.DB_HOST }} -p ${{ env.DB_PORT }} -U ${{ env.CI_DB_USERNAME }}; do
+            echo "⏳ PostgreSQL ainda não está pronto, aguardando..."
             sleep 2
           done
+          echo "✅ PostgreSQL está pronto!"
+
+      - name: Verificar conexão com o banco
+        run: |
+          echo "🔍 Testando conexão com PostgreSQL..."
+          PGPASSWORD=${{ env.CI_DB_PASSWORD }} psql -h ${{ env.DB_HOST }} -p ${{ env.DB_PORT }} -U ${{ env.CI_DB_USERNAME }} -d ${{ env.DB_NAME }} -c "SELECT version();"
 
       - name: Executar testes
-        run: ./mvnw clean test
+        run: |
+          echo "🧪 Executando testes..."
+          ./mvnw clean test
 
       - name: Executar build da aplicação
-        run: ./mvnw clean compile
+        run: |
+          echo "🔨 Executando build..."
+          ./mvnw clean compile
 
       - name: Validar migrações Flyway
-        run: ./mvnw flyway:info flyway:validate
+        run: |
+          echo "🔍 Validando migrações Flyway..."
+          ./mvnw flyway:info flyway:validate
 
       - name: Executar migrações Flyway
-        run: ./mvnw flyway:migrate
+        run: |
+          echo "🚀 Executando migrações Flyway..."
+          ./mvnw flyway:migrate
 
       - name: Verificar status das migrações
-        run: ./mvnw flyway:info
-
-      - name: Executar verificação adicional do banco
         run: |
-          # Conecta ao PostgreSQL e lista as tabelas criadas pelas migrações
-          PGPASSWORD=${{ secrets.DB_PASSWORD }} psql -h ${{ env.DB_HOST }} -p ${{ env.DB_PORT }} -U ${{ secrets.DB_USERNAME }} -d ${{ env.DB_NAME }} -c "\dt"
+          echo "📊 Verificando status das migrações..."
+          ./mvnw flyway:info
+
+      - name: Listar tabelas criadas
+        run: |
+          echo "📋 Listando tabelas criadas pelas migrações..."
+          PGPASSWORD=${{ env.CI_DB_PASSWORD }} psql -h ${{ env.DB_HOST }} -p ${{ env.DB_PORT }} -U ${{ env.CI_DB_USERNAME }} -d ${{ env.DB_NAME }} -c "\dt"
+
+      - name: Executar verificação final
+        run: |
+          echo "✅ Pipeline de CI concluído com sucesso!"
+          echo "📈 Resumo:"
+          echo "  - ✅ Testes executados"
+          echo "  - ✅ Build realizado"
+          echo "  - ✅ Migrações aplicadas"
+          echo "  - ✅ Banco de dados verificado"
