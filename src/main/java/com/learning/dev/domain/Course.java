@@ -2,8 +2,10 @@ package com.learning.dev.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SourceType;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -18,7 +20,7 @@ public class Course {
     @EqualsAndHashCode.Include
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private Long id;
 
     @Column(nullable = false)
     private String name;
@@ -27,5 +29,6 @@ public class Course {
     private String description;
 
     @Column(nullable = false)
-    private LocalDate create_date;
+    @CreationTimestamp(source = SourceType.DB)
+    private LocalDateTime create_date;
 }
