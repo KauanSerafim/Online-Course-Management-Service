@@ -3,6 +3,7 @@ package com.learning.dev.controller;
 import com.learning.dev.domain.Course;
 import com.learning.dev.service.CourseService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
@@ -27,7 +28,7 @@ public class CourseController {
     public ResponseEntity<Course> save(@RequestBody Course course) {
         var response = service.save(course);
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @DeleteMapping("/{courseId}")
@@ -35,5 +36,12 @@ public class CourseController {
         service.delete(courseId);
 
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/update")
+    public ResponseEntity<Course> update(@RequestBody Course course) {
+        var response = service.update(course);
+
+        return ResponseEntity.ok(response);
     }
 }
