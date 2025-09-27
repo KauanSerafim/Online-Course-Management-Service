@@ -1,6 +1,7 @@
 package com.learning.dev.service;
 
 import com.learning.dev.domain.Course;
+import com.learning.dev.exception.NotFoundException;
 import com.learning.dev.repository.CourseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,12 +23,21 @@ public class CourseService {
     }
 
     public void delete(Long id) {
-        var course = findByIdOrThrowRuntimeException(id);
+        var course = findByIdOrThrowNotFound(id);
         repository.delete(course);
     }
 
-    private Course findByIdOrThrowRuntimeException(Long id) {
+    public Course update(Course course) {
+        var courseSaved = findByIdOrThrowNotFound(course.getId());
+
+        course.setId(courseSaved.getId());
+        course.setCreate_date(courseSaved.getCreate_date());
+
+        return repository.save(course);
+    }
+
+    private Course findByIdOrThrowNotFound(Long id) {
         return repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Course not found with id " + id));
+                .orElseThrow(() -> new NotFoundException("Course Not Found"));
     }
 }
