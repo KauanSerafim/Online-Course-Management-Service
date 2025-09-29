@@ -1,6 +1,10 @@
 package com.learning.dev.controller;
 
 import com.learning.dev.domain.Student;
+import com.learning.dev.mapper.StudentMapper;
+import com.learning.dev.response.StudentGetResponse;
+import com.learning.dev.request.StudentPostRequest;
+import com.learning.dev.response.StudentPostResponse;
 import com.learning.dev.service.StudentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -16,23 +20,33 @@ import java.util.List;
 public class StudentController {
 
     private final StudentService service;
+    private final StudentMapper mapper;
 
     @GetMapping
-    public ResponseEntity<List<Student>> getAllStudents(@RequestParam(required = false) String name) {
-        var response = service.findAll(name);
+    public ResponseEntity<List<StudentGetResponse>> getStudents(@RequestParam(required = false) String name) {
 
-        return ResponseEntity.ok(response);
+        var studentList = service.findAll(name);
+
+        var studentResponse = mapper.toStudentGetResponse(studentList);
+
+        return ResponseEntity.ok(studentResponse);
     }
 
     @PostMapping
-    public ResponseEntity<Student> save(@RequestBody Student student) {
-        var response = service.save(student);
+    public ResponseEntity<StudentPostResponse> save(@RequestBody StudentPostRequest request) {
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        var student = mapper.toStudent(request);
+
+        var studentSaved = service.save(student);
+
+        var studentResponse = mapper.toStudentPostResponse(studentSaved);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(studentResponse);
     }
 
     @DeleteMapping("/{studentId}")
     public ResponseEntity<Void> delete(@PathVariable Long studentId) {
+
         service.delete(studentId);
 
         return ResponseEntity.noContent().build();
@@ -40,6 +54,7 @@ public class StudentController {
 
     @PutMapping("/update")
     public ResponseEntity<Student> update(@RequestBody Student student) {
+
         var response = service.update(student);
 
         return ResponseEntity.ok(response);
