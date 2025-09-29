@@ -1,10 +1,11 @@
 package com.learning.dev.controller;
 
-import com.learning.dev.domain.Student;
 import com.learning.dev.mapper.StudentMapper;
-import com.learning.dev.response.StudentGetResponse;
 import com.learning.dev.request.StudentPostRequest;
+import com.learning.dev.request.StudentPutRequest;
+import com.learning.dev.response.StudentGetResponse;
 import com.learning.dev.response.StudentPostResponse;
+import com.learning.dev.response.StudentPutResponse;
 import com.learning.dev.service.StudentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -53,9 +54,13 @@ public class StudentController {
     }
 
     @PutMapping("/update")
-    public ResponseEntity<Student> update(@RequestBody Student student) {
+    public ResponseEntity<StudentPutResponse> update(@RequestBody StudentPutRequest request) {
 
-        var response = service.update(student);
+        var student = mapper.toStudent(request);
+
+        var studentUpdated = service.update(student);
+
+        var response = mapper.toStudentPutResponse(studentUpdated);
 
         return ResponseEntity.ok(response);
     }
