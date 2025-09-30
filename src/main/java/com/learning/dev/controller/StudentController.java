@@ -7,17 +7,19 @@ import com.learning.dev.response.StudentGetResponse;
 import com.learning.dev.response.StudentPostResponse;
 import com.learning.dev.response.StudentPutResponse;
 import com.learning.dev.service.StudentService;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@Controller
+@RestController
 @RequestMapping("v1/students")
 @RequiredArgsConstructor
+@Tag(name = "Student API", description = "Student related endpoints")
 public class StudentController {
 
     private final StudentService service;
@@ -34,7 +36,7 @@ public class StudentController {
     }
 
     @PostMapping
-    public ResponseEntity<StudentPostResponse> save(@RequestBody StudentPostRequest request) {
+    public ResponseEntity<StudentPostResponse> save(@RequestBody @Valid StudentPostRequest request) {
 
         var student = mapper.toStudent(request);
 
@@ -45,16 +47,16 @@ public class StudentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(studentResponse);
     }
 
-    @DeleteMapping("/{studentId}")
-    public ResponseEntity<Void> delete(@PathVariable Long studentId) {
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
 
-        service.delete(studentId);
+        service.delete(id);
 
         return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/update")
-    public ResponseEntity<StudentPutResponse> update(@RequestBody StudentPutRequest request) {
+    public ResponseEntity<StudentPutResponse> update(@RequestBody @Valid StudentPutRequest request) {
 
         var student = mapper.toStudent(request);
 
