@@ -1,6 +1,7 @@
 package com.learning.dev.service;
 
 import com.learning.dev.domain.Course;
+import com.learning.dev.exception.CourseNameAlreadyExistsException;
 import com.learning.dev.exception.NotFoundException;
 import com.learning.dev.repository.CourseRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,10 @@ public class CourseService {
     }
 
     public Course save(Course course) {
+        var courseName = course.getName();
+
+        throwCourseNameAlreadyExists(courseName);
+
         return repository.save(course);
     }
 
@@ -39,5 +44,14 @@ public class CourseService {
     private Course findByIdOrThrowNotFound(Long id) {
         return repository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Course Not Found"));
+    }
+
+    private void throwCourseNameAlreadyExists(String name) {
+        var course = repository.findByNameIgnoreCase(name);
+
+        if (course == null) {
+            return;
+        }
+        throw new CourseNameAlreadyExistsException("Course already exists");
     }
 }
